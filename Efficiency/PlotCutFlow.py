@@ -63,12 +63,19 @@ if __name__ == "__main__" :
 
     print(" ### INFO: Plotting")
 
+    FancyNames = {
+        "base_selection":   r"Base: $p_{T} > 17\;GeV$",
+        "METFilterRDF":     r"MET filter",
+        "HHLeptonRDF":      r"$Z \rightarrow \tau\tau$ candidate",
+        "HHJetsRDF":        r"$Z \rightarrow bb$ candidate",
+    }
+
     cmap = plt.get_cmap('viridis')
     mass = [float(mass) for mass in mass_points]
     fig, ax = plt.subplots(figsize=(10,10))
     for j, CutName in enumerate(CutNames):
         if CutName == 'ZZBBTauTauFilterRDF_Sig': continue
-        ax.errorbar(mass, CutEff[j], yerr=CutEffErr[j], label=CutName, lw=2, linestyle='', marker='o', color=cmap(j/len(CutNames)))
+        ax.errorbar(mass, CutEff[j], yerr=CutEffErr[j], label=FancyNames[CutName], lw=2, linestyle='', marker='o', color=cmap(j/len(CutNames)))
 
     SetStyle(ax, x_label="Mass [GeV]", y_label="Cut efficiency", x_lim=(np.min(mass)-40, np.max(mass)+40), y_lim=(0,1.2), leg_title='')
     plt.savefig(odir+'/CutFlowEfficiency.png')
