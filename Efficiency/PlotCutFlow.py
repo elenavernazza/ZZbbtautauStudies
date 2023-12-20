@@ -1,6 +1,5 @@
 import os,json, mplhep
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use(mplhep.style.CMS)
 
@@ -75,8 +74,8 @@ if __name__ == "__main__" :
     plt.savefig(odir+'/CutFlowEfficiency.png')
     plt.savefig(odir+'/CutFlowEfficiency.pdf')
     plt.xscale('log')
-    plt.savefig(odir+'/CutFlowEfficiencyLog.png')
-    plt.savefig(odir+'/CutFlowEfficiencyLog.pdf')
+    plt.savefig(odir+'/CutFlowEfficiencyLogX.png')
+    plt.savefig(odir+'/CutFlowEfficiencyLogX.pdf')
     plt.close()
     
 
