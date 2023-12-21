@@ -24,7 +24,7 @@ def SetStyle(ax, x_label, y_label, x_lim = None, y_lim = None, leg_title=''):
     plt.grid()
     for xtick in ax.xaxis.get_major_ticks():
         xtick.set_pad(10)
-    mplhep.cms.label(data=False, rlabel='(13.6 TeV)')
+    mplhep.cms.label(data=False)
 
 ROOT.gInterpreter.Declare("""
                 using Vfloat = const ROOT::RVec<float>&;
@@ -70,17 +70,18 @@ ROOT.gInterpreter.Declare("""
                 }
             """)
 
+# python3 PlotDeltaR.py
+# python3 PlotDeltaR.py --indir nano
+
 if __name__ == "__main__" :
 
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("--mass",         dest="mass",        default='200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,2000,3000')
     parser.add_option("--ver",          dest="ver",         default='prod_231005')
+    parser.add_option("--indir",        dest="indir",       default='prep') # 'nano'
     parser.add_option("--plot_only",    dest="plot_only",   default=False,      action='store_true')
     (options, args) = parser.parse_args()
-
-    indir_nano = '/data_CMS/cms/vernazza/MCProduction/2023_11_14/MyPrivateGridpacks'
-    indir_prep = '/data_CMS/cms/vernazza/cmt/PreprocessRDF/ul_2018_ZZ_v10'
 
     ver = options.ver
     if ',' in options.mass:
@@ -88,7 +89,12 @@ if __name__ == "__main__" :
     else:
         mass_points = [options.mass]
 
-    odir = os.getcwd() + f'/DeltaR/{ver}'
+    if options.indir == 'prep': 
+        indir_prep = '/data_CMS/cms/vernazza/cmt/PreprocessRDF/ul_2018_ZZ_v10'
+        odir = os.getcwd() + f'/DeltaR/{ver}'
+    if options.indir == 'nano':
+        indir_nano = '/data_CMS/cms/vernazza/MCProduction/2023_11_14/MyPrivateGridpacks'
+        odir = os.getcwd() + f'/DeltaR/NanoAOD'
     print(" ### INFO: Saving output in ", odir)
     os.system('mkdir -p ' + odir)
 
@@ -99,9 +105,13 @@ if __name__ == "__main__" :
         for mass in mass_points:
 
             print(" ### INFO: Analysing mass point", mass)
-            # files = glob.glob(indir_prep + f'/gg_X_ZZbbtautau_M{mass}/*')
-            files = glob.glob(indir_prep + f'/ggXZZbbtt_M{mass}/cat_base_selection/prod_231005/*')
-            print(" ### INFO: Input folder", indir_prep + f'/ggXZZbbtt_M{mass}/cat_base_selection/prod_231005/*')
+            if options.indir == 'prep': 
+                folder = indir_prep + f'/ggXZZbbtt_M{mass}/cat_base_selection/prod_231005'
+                files = glob.glob(folder + '/*')
+            if options.indir == 'nano':
+                folder = indir_nano + f'/gg_X_ZZbbtautau_M{mass}/Step_4/'
+                files = glob.glob(folder + '/*')
+            print(" ### INFO: Input folder", folder)
 
             dataframe_files = ROOT.vector(str)()
             for f in files:
@@ -146,6 +156,10 @@ if __name__ == "__main__" :
     SetStyle(ax, x_label=r"$\Delta R(b_{1},b_{2})$", x_lim=(0,4), y_label="Entries")
     plt.savefig(odir + '/DeltaR_bjets.png')
     plt.savefig(odir + '/DeltaR_bjets.pdf')
+    plt.xlim(0.2,4)
+    plt.xscale('log')
+    plt.savefig(odir + '/DeltaR_bjets_LogX.png')
+    plt.savefig(odir + '/DeltaR_bjets_LogX.pdf')
     plt.close()    
 
     fig, ax = plt.subplots(figsize=(10,10))
@@ -155,5 +169,9 @@ if __name__ == "__main__" :
     SetStyle(ax, x_label=r"$\Delta R(\tau_{1},\tau_{2})$", x_lim=(0,4), y_label="Entries")
     plt.savefig(odir + '/DeltaR_taus.png')
     plt.savefig(odir + '/DeltaR_taus.pdf')
+    plt.xlim(0.2,4)
+    plt.xscale('log')
+    plt.savefig(odir + '/DeltaR_taus_LogX.png')
+    plt.savefig(odir + '/DeltaR_taus_LogX.pdf')
     plt.close()  
 
