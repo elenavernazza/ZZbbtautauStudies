@@ -40,6 +40,9 @@ if __name__ == "__main__" :
     isBoosted = {mass: 0 for mass in mass_points}
     isNotBoosted = {mass: 0 for mass in mass_points}
     Total = {mass: 0 for mass in mass_points}
+    isBoostedNew = {mass: 0 for mass in mass_points}
+    isNotBoostedNew = {mass: 0 for mass in mass_points}
+    TotalNew = {mass: 0 for mass in mass_points}
 
     for ch in ['etau', 'mutau', 'tautau']:
 
@@ -58,23 +61,47 @@ if __name__ == "__main__" :
             isBoosted[mass] += h.GetBinContent(2)
             Total[mass] += h.Integral()
 
+    ###############################################################################
+    # Temporary
+    FileName = indir + 'cat_ZZ_elliptical_cut_80_sr/prod_240210/root/boosted__os_iso__pg_ggXZZbbtt__nodata.root'
+    tf_sig = ROOT.TFile.Open(FileName)
+    dir = tf_sig.Get("histograms")
+    dir.cd()
+
+    for mass in mass_points:
+
+        h = ROOT.TH1D(dir.Get(f"ggXZZbbtt_M{mass}"))
+
+        isNotBoostedNew[mass] += h.GetBinContent(1)
+        isBoostedNew[mass] += h.GetBinContent(2)
+        TotalNew[mass] += h.Integral()
+    
+    ###############################################################################
+
+
     def GetUnc(num,den):
         return num/den * np.sqrt((np.sqrt(num)/num)**2+(np.sqrt(den)/den)**2)
 
     isBoosted_Percentage = [float(isBoosted[mass]/Total[mass]) for mass in isBoosted.keys()]
     isBoosted_Percentage_Error = [GetUnc(float(isBoosted[mass]),float(Total[mass])) for mass in isBoosted.keys()]
     isNotBoosted_Percentage = [float(isNotBoosted[mass]/Total[mass]) for mass in isNotBoosted.keys()]
+
+    isBoostedNew_Percentage = [float(isBoostedNew[mass]/TotalNew[mass]) for mass in isBoostedNew.keys()]
+    isBoostedNew_Percentage_Error = [GetUnc(float(isBoostedNew[mass]),float(TotalNew[mass])) for mass in isBoostedNew.keys()]
+    isNotBoostedNew_Percentage = [float(isBoostedNew[mass]/TotalNew[mass]) for mass in isBoostedNew.keys()]
+
     mass = [float(mass) for mass in mass_points]
 
     cmap = plt.get_cmap('viridis')
     fig, ax = plt.subplots(figsize=(10,10))
-    ax.errorbar(mass, isBoosted_Percentage, yerr=isBoosted_Percentage_Error, lw=2, linestyle='', marker='o', color=cmap(0))
-    SetStyle(ax, x_label="Mass [GeV]", y_label="Boosted fraction", x_lim=(np.min(mass)-40, np.max(mass)+40), y_lim=(0,1.1*np.max(isBoosted_Percentage)), leg_title='')
-    plt.savefig(odir + '/BoostedFraction.png')
-    plt.savefig(odir + '/BoostedFraction.pdf')
+    ax.errorbar(mass, isBoosted_Percentage, yerr=isBoosted_Percentage_Error, lw=2, linestyle='', marker='o', color=cmap(0), label='Old')
+    ax.errorbar(mass, isBoostedNew_Percentage, yerr=isBoostedNew_Percentage_Error, lw=2, linestyle='', marker='o', color=cmap(0.5), label='New')
+    SetStyle(ax, x_label="Mass [GeV]", y_label="Boosted fraction", x_lim=(np.min(mass)-40, np.max(mass)+40), y_lim=(0,1.1), leg_title='')
+    plt.savefig(odir + '/BoostedFractionNew.png')
+    plt.savefig(odir + '/BoostedFractionNew.pdf')
     plt.xscale('log')
-    plt.savefig(odir + '/BoostedFractionLogX.png')
-    plt.savefig(odir + '/BoostedFractionLogX.pdf')
+    plt.savefig(odir + '/BoostedFractionNewLogX.png')
+    plt.savefig(odir + '/BoostedFractionNewLogX.pdf')
     plt.close()
 
 

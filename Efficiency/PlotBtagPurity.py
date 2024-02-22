@@ -197,7 +197,7 @@ if __name__ == "__main__" :
         btag_efficiency_error.append(GetUnc(H_b1_matched[i].Integral(),H_b1[i].Integral()))
     mass = [float(mass) for mass in mass_points]
     ax.errorbar(mass, btag_efficiency, yerr=btag_efficiency_error, lw=2, marker='o', linestyle='', color=cmap(0))
-    SetStyle(ax, x_label="Mass [GeV]", y_label="Btag efficiency")
+    SetStyle(ax, x_label="Mass [GeV]", y_label="Btag purity")
     plt.savefig(odir + '/btag_efficiency.png')
     plt.savefig(odir + '/btag_efficiency.pdf')
     plt.xscale('log')
