@@ -1,5 +1,9 @@
 import ROOT, os, math
 import numpy as np
+import scipy.optimize
+import sys
+from concurrent.futures import ProcessPoolExecutor
+import itertools
 
 def is_inside_ellipse(x1, y1, r1, r2, x, y):
     dist_x = (x - x1) ** 2 / r1 ** 2
@@ -24,6 +28,17 @@ def integrate_inside_ellipse(h, e):
                 integral += bin_content
     return integral
 
+def sob_fct_forThreads(opt_x, sig_eff_thr):
+    #print(opt_x)
+    x_c, y_c, x_w, y_w = opt_x
+    e = ROOT.TEllipse(x_c, y_c, x_w, y_w)
+    sig_efficiency = integrate_inside_ellipse(h_sig, e) / h_sig.Integral()
+    #print((sig_efficiency, sig_eff_thr))
+    if sig_efficiency <= sig_eff_thr:
+        return None
+    bkg_efficiency = integrate_inside_ellipse(h_bkg, e) / h_bkg.Integral()
+    return sig_efficiency/max(math.sqrt(bkg_efficiency), sys.float_info.epsilon)
+
 '''
 python3 OptimizeEllipseZZ.py --sig /eos/user/e/evernazz/cmt/FeaturePlot2D/ul_2018_v10/cat_mutau/prod_0524_2/root/Htt_svfit_mass_Hbb_mass__mutau_os_iso__pg_zz_signal__nodata.root \
  --bkg /eos/user/e/evernazz/cmt/FeaturePlot2D/ul_2018_v10/cat_mutau/prod_0524_2/root/Htt_svfit_mass_Hbb_mass__mutau_os_iso__pg_zz_background__nodata.root
@@ -35,10 +50,14 @@ if __name__ == "__main__" :
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("--sig",       dest="signal",       help="Input signal root file",     default=None                                  )
+    parser.add_option("--hSig",      dest="signalHist",   help="Name of the histogram for signal", default="zz_sl_signal")
     parser.add_option("--bkg",       dest="background",   help="Input background root file", default=None                                  )
+    parser.add_option("--hBkg",      dest="backgroundHist",   help="Name of the histogram for background", default="zz_background")
     parser.add_option("--outdir",    dest="outdir",       help="Output directory",           default='./EllipsePlots'                      )
     parser.add_option("--eff",       dest="efficiency",   help="Signal efficiency",          default=0.8                                   )
-    # parser.add_option("--scan",      dest="scan",         help="Scan type (wide/fine)",      default=False,            action='store_true' )
+    parser.add_option("--scan",      dest="scan",         help="Scan type (wide/fine)",      default="fine")
+    parser.add_option("--optimizer", dest="optimizer", help="Optimizer type : grid or scipy or multiprocess_grid", default="grid")
+    parser.add_option("--constrainNonNegative", dest="constrainNonNegative", help="Constrain ellipse so it does not overlap with negative mass regions", default=False, action="store_true")
     (options, args) = parser.parse_args()
     print(options)
 
@@ -53,7 +72,7 @@ if __name__ == "__main__" :
     tf_sig = ROOT.TFile.Open(FileName_sig)
     dir = tf_sig.Get("histograms")
     dir.cd()
-    h_sig = ROOT.TH2D(dir.Get("zz_sl_signal"))
+    h_sig = ROOT.TH2D(dir.Get(options.signalHist))
 
     tf_bkg = ROOT.TFile.Open(FileName_bkg)
     dir = tf_bkg.Get("histograms")
@@ -61,45 +80,62 @@ if __name__ == "__main__" :
     h_bkg = ROOT.TH2D(dir.Get("zz_background"))
 
     # base
-    x_c_vec = np.arange(120,128+1,2)
-    x_w_vec = np.arange(80,90+1,3)
-    y_c_vec = np.arange(165,180+1,2)
-    y_w_vec = np.arange(160,180+1,3)
+    x_c_vec = np.arange(80,110+1,7)
+    x_w_vec = np.arange(50,100+1,10)
+    y_c_vec = np.arange(100,180+1,8)
+    y_w_vec = np.arange(100,180+1,10)
+    
+    if options.signalHist == "zh_ztt_hbb_sl_signal":
+        ################## Ztt_hbb
+        if options.scan == "wide":
+            x_c_vec = np.arange(70,110+1,4)
+            x_w_vec = np.arange(20,100+1,5)
+            y_c_vec = np.arange(70,240+1,5)
+            y_w_vec = np.arange(60,230+1,5)
+        
+        elif options.scan == "fine":
+            if options.efficiency == 0.8:
+                # sig_efficiency 0.8
+                if options.constrainNonNegative:
+                    x_c_vec = np.arange(90,95+1,1)
+                    x_w_vec = np.arange(35,45+1,1)
+                    y_c_vec = np.arange(170,180+1,1)
+                    y_w_vec = np.arange(155,170+1,1)
+                else:
+                    x_c_vec = np.arange(85,95+1,1)
+                    x_w_vec = np.arange(35,50+1,1)
+                    y_c_vec = np.arange(175,245+1,3)
+                    y_w_vec = np.arange(155,220+1,3)
 
-    # # sig_efficiency 0.9 : Best Ellipse (121.0, 177.0, 82.0, 173.0): S_eff=0.9002, B_eff=0.6641, S/B=1.3556
-    x_c_vec = np.arange(120,124+1,1)
-    x_w_vec = np.arange(81,85+1,1)
-    y_c_vec = np.arange(174,179+1,1)
-    y_w_vec = np.arange(170,174+1,1)
-    # x_c_vec = [121]; x_w_vec = [82]; y_c_vec = [177]; y_w_vec = [173]
+            elif options.efficiency == 0.9:
+                if options.constrainNonNegative:
+                    # sig eff 0.9
+                    x_c_vec = np.arange(88,105+1,1)
+                    x_w_vec = np.arange(62,75+1,1)
+                    y_c_vec = np.arange(180,205+1,1)
+                    y_w_vec = np.arange(175,189+1,1)
 
-    # # sig_efficiency 0.85 : Best Ellipse (113.0, 161.0, 62.0, 155.0): S_eff=0.8506, B_eff=0.5498, S/B=1.5472
-    # x_c_vec = np.arange(111,115+1,1)
-    # x_w_vec = np.arange(60,65+1,1)
-    # y_c_vec = np.arange(158,162+1,1)
-    # y_w_vec = np.arange(149,155+1,1)
-    # x_c_vec = [113]; x_w_vec = [62]; y_c_vec = [161]; y_w_vec = [155]
-
-    # # sig_efficiency 0.8 : Best Ellipse (105.0, 118.0, 51.0, 113.0): S_eff=0.8001 B_eff=0.4676 S/B=1.7108
-    # x_c_vec = np.arange(102,108+1,1)
-    # x_w_vec = np.arange(45,55+1,1)
-    # y_c_vec = np.arange(115,120+1,1)
-    # y_w_vec = np.arange(110,115+1,1)
-    # x_c_vec = [105]; x_w_vec = [51]; y_c_vec = [118]; y_w_vec = [113]
-
-    # # sig_efficiency 0.75 : Best Ellipse (103.0, 108.0, 45.0, 91.0): S_eff=0.7501, B_eff=0.3955, S/B=1.8965
-    # x_c_vec = np.arange(102,106+1,1)
-    # x_w_vec = np.arange(42,48+1,1)
-    # y_c_vec = np.arange(105,110+1,1)
-    # y_w_vec = np.arange(87,93+1,1)
-    # x_c_vec = [103]; x_w_vec = [45]; y_c_vec = [108]; y_w_vec = [91]
-
-    # # sig_efficiency 0.7 : Best Ellipse (101.0, 102.0, 38.0, 83.0): S_eff=0.7008 B_eff=0.3318 S/B=2.1120
-    # x_c_vec = np.arange(96,102+1,1)
-    # x_w_vec = np.arange(35,45+1,1)
-    # y_c_vec = np.arange(100,104+1,1)
-    # y_w_vec = np.arange(75,85+1,1)
-    # x_c_vec = [101]; x_w_vec = [38]; y_c_vec = [102]; y_w_vec = [83]
+    if options.signalHist == "zh_zbb_htt_sl_signal":
+        ################## Zbb_htt
+        if options.scan == "wide":
+            x_c_vec = np.arange(70,160+1,4)
+            x_w_vec = np.arange(20,100+1,5)
+            y_c_vec = np.arange(60,150+1,5)
+            y_w_vec = np.arange(40,150+1,5)
+        
+        elif options.scan == "fine":
+            if options.efficiency == 0.8:
+                # # sig_efficiency 0.8 
+                x_c_vec = np.arange(135,145+1,1)
+                x_w_vec = np.arange(50,65+1,1)
+                y_c_vec = np.arange(75,90+1,1)
+                y_w_vec = np.arange(60,75+1,1)
+            elif options.efficiency == 0.9:
+                # sig_efficiency 0.9
+                x_c_vec = np.arange(155,165+1,1)
+                x_w_vec = np.arange(80,90+1,1)
+                y_c_vec = np.arange(110,120+1,1)
+                y_w_vec = np.arange(110,125+1,1)
 
     print(' ### INFO: Start looping')
     print(' x_c in :', x_c_vec)
@@ -107,24 +143,72 @@ if __name__ == "__main__" :
     print(' x_w in :', x_w_vec)
     print(' y_w in :', y_w_vec)
 
-    Max_SoB = 0
-    Best_E = None
-    for x_c in x_c_vec:
-        for y_c in y_c_vec:
-            for x_w in x_w_vec:
-                for y_w in y_w_vec:
-                    if y_c < y_w : continue
-                    # print(x_c, y_c, x_w, y_w)
-                    e = ROOT.TEllipse(x_c, y_c, x_w, y_w)
-                    sig_efficiency = integrate_inside_ellipse(h_sig, e) / h_sig.Integral()
-                    if sig_efficiency > sig_eff_thr:
-                        bkg_efficiency = integrate_inside_ellipse(h_bkg, e) / h_bkg.Integral()
-                        SoB = sig_efficiency/bkg_efficiency
-                        if SoB > Max_SoB:
-                            Max_SoB = SoB
-                            Best_E = e
-                            print("Best Ellipse ({}, {}, {}, {}): S_eff={:.4f}, B_eff={:.4f}, S/B={:.4f}".format(e.GetX1(), e.GetY1(), e.GetR1(), e.GetR2(), sig_efficiency, bkg_efficiency, SoB))
-                            # e.SetLineWidth(2)
+    if options.optimizer == "scipy":
+        raise RuntimeError("Scipy optimizer does not work (yet)")
+        start_point = (140, 80, 60, 60)
+        def sob_fct(opt_x):
+            x_c, y_c, x_w, y_w = opt_x
+            e = ROOT.TEllipse(x_c, y_c, x_w, y_w)
+            sig_efficiency = integrate_inside_ellipse(h_sig, e) / h_sig.Integral()
+            bkg_efficiency = integrate_inside_ellipse(h_bkg, e) / h_bkg.Integral()
+            return sig_efficiency/max(math.sqrt(bkg_efficiency), sys.float_info.epsilon)
+
+        def sig_eff_constraint(opt_x):
+            x_c, y_c, x_w, y_w = opt_x
+            e = ROOT.TEllipse(x_c, y_c, x_w, y_w)
+            return integrate_inside_ellipse(h_sig, e) / h_sig.Integral() - sig_eff_thr
+
+        constraint = ({'type': 'ineq', 'fun': sig_eff_constraint})
+        # cobyla and SLSQP from minimize do not work correctly due to flat regions in function
+        fit_res = scipy.optimize.minimize(sob_fct, start_point, method="SLSQP", options=dict(disp=True))
+        print(fit_res)
+
+        Best_E = ROOT.TEllipse(*fit_res.x)
+        print("Best Ellipse ({}, {}, {}, {}): S_eff={:.4f}, B_eff={:.4f}, S/sqrt(B)={:.4f}".format(Best_E.GetX1(), Best_E.GetY1(), Best_E.GetR1(), Best_E.GetR2(),
+                                sig_eff_constraint(fit_res.x), integrate_inside_ellipse(h_bkg, Best_E) / h_bkg.Integral(), sob_fct(fit_res.x)))
+
+    elif options.optimizer == "multiprocess_grid":
+        if options.constrainNonNegative:
+            raise RuntimeError("constrainNonNegative and multiprocess_grid are not compatible")
+        with ProcessPoolExecutor(max_workers=20) as executor:
+            grid_result = executor.map(sob_fct_forThreads, itertools.product(x_c_vec, y_c_vec, x_w_vec, y_w_vec), itertools.repeat(sig_eff_thr), chunksize=20)
+            Max_SoB = 0
+            best_input = None
+            for input_val, SoB in zip(itertools.product(x_c_vec, y_c_vec, x_w_vec, y_w_vec), grid_result):
+                if SoB is not None and SoB >= Max_SoB:
+                    if SoB == Max_SoB: 
+                        best_input.append(input_val)
+                    else:
+                        best_input = [input_val]
+                    Max_SoB = SoB
+        if Max_SoB is None:
+            raise RuntimeError("Did not find any ellipse matching signal efficiency")
+        print(best_input)
+        Best_E = ROOT.TEllipse(*best_input[0])
+        print("Best Ellipse ({}, {}, {}, {}): S_eff={:.4f}, B_eff={:.4f}, S/sqrt(B)={:.4f}".format(Best_E.GetX1(), Best_E.GetY1(), Best_E.GetR1(), Best_E.GetR2(),
+                                integrate_inside_ellipse(h_sig, Best_E) / h_sig.Integral(), integrate_inside_ellipse(h_bkg, Best_E) / h_bkg.Integral(), Max_SoB))
+    
+    elif options.optimizer == "grid":
+        Max_SoB = 0
+        Best_E = None
+        for x_c in x_c_vec:
+            for y_c in y_c_vec:
+                for x_w in x_w_vec:
+                    for y_w in y_w_vec:
+                        if options.constrainNonNegative and y_c < y_w : continue # prevent ellipse holding negative values. Removed now
+                        # print(x_c, y_c, x_w, y_w)
+                        e = ROOT.TEllipse(x_c, y_c, x_w, y_w)
+                        sig_efficiency = integrate_inside_ellipse(h_sig, e) / h_sig.Integral()
+                        if sig_efficiency > sig_eff_thr:
+                            bkg_efficiency = integrate_inside_ellipse(h_bkg, e) / h_bkg.Integral()
+                            SoB = sig_efficiency/math.sqrt(bkg_efficiency)
+                            if SoB > Max_SoB:
+                                Max_SoB = SoB
+                                Best_E = e
+                                print("Best Ellipse ({}, {}, {}, {}): S_eff={:.4f}, B_eff={:.4f}, S/sqrt(B)={:.4f}".format(e.GetX1(), e.GetY1(), e.GetR1(), e.GetR2(), sig_efficiency, bkg_efficiency, SoB))
+                                # e.SetLineWidth(2)
+    else:
+        raise RuntimeError("Invalid parameter optimizer " + args.optimizer)
 
     print(' ### INFO: Plot ellipse')
 
@@ -132,7 +216,7 @@ if __name__ == "__main__" :
     canvas.cd()
     canvas.SetRightMargin(0.18)
 
-    h_sig.SetTitle("ZZ Signal")
+    h_sig.SetTitle("ZH Signal")
     h_sig.Draw("COLZ")
     h_sig.GetXaxis().SetTitle("m_{#tau#tau}^{SVfit} [GeV]")
     h_sig.GetYaxis().SetTitle("m_{bb} [GeV]")
@@ -159,7 +243,7 @@ if __name__ == "__main__" :
     canvas.cd()
     canvas.SetRightMargin(0.18)
 
-    h_bkg.SetTitle("ZZ Sum of Backgrounds")
+    h_bkg.SetTitle("ZH Sum of Backgrounds")
     h_bkg.Draw("COLZ")
     h_bkg.GetXaxis().SetTitle("m_{#tau#tau}^{SVfit} [GeV]")
     h_bkg.GetYaxis().SetTitle("m_{bb} [GeV]")
@@ -182,15 +266,21 @@ if __name__ == "__main__" :
     # h_sig.Scale(1.)
     # h_bkg.Scale(1.)
     h_ratio = h_sig.Clone("h_ratio")
-    h_ratio.Divide(h_bkg)
+    h_sqrtBkg = h_bkg.Clone("h_sqrtBkg")
+    for bin in range(h_sqrtBkg.GetNcells()+1):
+        try:
+            h_sqrtBkg.SetBinContent(bin, math.sqrt(h_sqrtBkg.GetBinContent(bin)))
+        except ValueError:
+            h_sqrtBkg.SetBinContent(bin, 0)
+    h_ratio.Divide(h_sqrtBkg)
     h_ratio.Draw("COLZ")
     h_ratio.GetXaxis().SetTitle("m_{#tau#tau}^{SVfit} [GeV]")
     h_ratio.GetYaxis().SetTitle("m_{bb} [GeV]")
     h_ratio.GetZaxis().SetTitleOffset(1.5)
-    h_ratio.GetZaxis().SetTitle("S/B ratio")
+    h_ratio.GetZaxis().SetTitle("S/sqrt(B) ratio")
     h_ratio.SetMinimum(0.)
-    # h_ratio.SetMaximum(0.01)
-    h_ratio.SetTitle("ZZ S/B")
+    h_ratio.SetMaximum(0.04)
+    h_ratio.SetTitle("ZH S/sqrt(B)")
     Best_E.Draw("SAME")
 
     legend = ROOT.TLegend(0.4,0.83,0.82,0.9)
