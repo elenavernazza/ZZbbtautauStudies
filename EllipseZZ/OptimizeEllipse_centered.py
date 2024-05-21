@@ -59,7 +59,7 @@ if __name__ == "__main__" :
     tf_bkg = ROOT.TFile.Open(FileName_bkg)
     dir = tf_bkg.Get("histograms")
     dir.cd()
-    h_bkg = ROOT.TH2D(dir.Get("zz_background"))
+    h_bkg = ROOT.TH2D(dir.Get(options.backgroundHist))
 
 
     canvas_tautau = ROOT.TCanvas("canvas", "mtautau", 800, 600)
